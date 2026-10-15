@@ -165,8 +165,9 @@
 
   /* ---- the exchange: two lanes, the scanner's on the left, the robot's on
      the right, and what crosses between them drawn as arrows ---- */
-  .lanes { display:grid; grid-template-columns:minmax(0,1fr) 116px minmax(0,1fr);
-           row-gap:12px; padding-bottom:14px; }
+  .lanes { position:relative; display:grid;
+           grid-template-columns:minmax(0,1fr) 116px minmax(0,1fr);
+           row-gap:30px; padding-bottom:16px; }
   /* Every item in the lanes is placed on an explicit row by the script.  Left
      to auto-placement, items skip cells a lane frame already covers, so the
      frames spanned empty rows at the top and the steps landed below them. */
@@ -199,20 +200,19 @@
        border:1px solid var(--border); font-size:10.5px; letter-spacing:0; text-align:center;
        line-height:18px; color:var(--muted); transition:all .3s ease; }
 
-  /* Arrows reach across the lane borders to the boxes themselves. */
-  .mid { grid-column:2; display:flex; flex-direction:column; justify-content:center;
-         gap:14px; margin:0 -12px; align-self:center; transition:opacity .3s ease; }
-  .arw { position:relative; height:14px; text-align:center; font-size:9.5px; font-weight:700;
-         letter-spacing:.12em; text-transform:uppercase; line-height:14px; }
-  .arw::before { content:""; position:absolute; left:0; right:0; top:50%; height:2px;
-                 margin-top:-1px; background:currentColor; opacity:.85; }
-  .arw span { position:relative; background:var(--panel); padding:0 6px; }
-  .arw::after { content:""; position:absolute; top:50%; margin-top:-5px;
-                border:5px solid transparent; }
-  .arw.r::after { right:-2px; border-left:8px solid currentColor; border-right:0; }
-  .arw.l::after { left:-2px;  border-right:8px solid currentColor; border-left:0; }
-  .arw.set { color:var(--orange); }
-  .arw.ans { color:var(--accent); }
+  /* The links, drawn over the lanes: across from an action to the answer it
+     waits for, then diagonally from that answer down to the next action. */
+  .links { position:absolute; left:0; top:0; pointer-events:none; overflow:visible; }
+  .lk line { stroke-width:2; stroke-linecap:round; transition:stroke .3s ease, opacity .3s ease; }
+  .lk path { stroke:none; transition:fill .3s ease, opacity .3s ease; }
+  .lk.h line { stroke:var(--orange); }  .lk.h path { fill:var(--orange); }
+  .lk.d line { stroke:var(--accent); }  .lk.d path { fill:var(--accent); }
+  .lk.running line,.lk.waiting line { stroke:var(--blue); stroke-dasharray:7 5;
+                                      animation:dash .7s linear infinite; }
+  .lk.running path,.lk.waiting path { fill:var(--blue); }
+  .lk.timeout line { stroke:var(--red); }  .lk.timeout path { fill:var(--red); }
+  .lk.pending { opacity:.3; }
+  @keyframes dash { to { stroke-dashoffset:-12; } }
 
   /* While a sequence runs: what is still to come recedes, the step in
      progress is blue and its arrows move, an answered step carries a tick. */
@@ -220,8 +220,6 @@
   .box.running,.box.waiting { border-color:var(--blue); box-shadow:0 0 16px rgba(59,184,255,.18); }
   .box.running .n,.box.waiting .n { background:var(--blue); border-color:var(--blue); color:var(--bg); }
   .box.waiting .n { animation:pulse 1s ease-in-out infinite; }
-  .mid.waiting .arw.ans,.mid.running .arw.set { animation:flow .9s ease-in-out infinite; }
-  @keyframes flow { 50% { opacity:.35; } }
   .box.done { border-color:rgba(93,239,191,.4); }
   .box.done .n { background:var(--accent); border-color:var(--accent); color:var(--bg); }
   .box.in.done .tm { color:var(--accent); }
@@ -230,8 +228,7 @@
   .box.in.timeout .tm { color:var(--red); }
 
   @media (max-width:760px) {
-    .lanes { grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr); }
-    .arw span { display:none; }
+    .lanes { grid-template-columns:minmax(0,1fr) 48px minmax(0,1fr); }
   }
 
   .chip { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; min-width:0;
@@ -756,44 +753,38 @@ function buildSequenceViews() {
       + '<div class="lanehead i">Input<small>robot &rarr; scanner</small></div>';
     const cards = [];
     scenario.steps.forEach((step, index) => {
-      const sets = step.sets.length > 0;
-      const waits = step.waits.length > 0;
       const number = `<span class="n">${index + 1}</span>`;
 
-      /* A step that writes is titled where it writes; one that only waits is
-         titled where it waits, and its output box says nothing changed. */
+      /* Every step acts on the output side.  One that writes nothing to the
+         assembly -- the simulator faulting on cue -- is drawn dashed. */
       const out = document.createElement("div");
-      out.className = "box out" + (sets ? "" : " idle");
-      out.innerHTML = sets
-        ? `<div class="bt">${number}${esc(step.title)}</div><div class="chips"></div>`
-        : `<div class="bt">${number}&hellip; unchanged</div>`;
+      out.className = "box out" + (step.sets.length ? "" : " idle");
+      out.innerHTML = `<div class="bt">${number}${esc(step.title)}</div>`
+        + (step.sets.length ? '<div class="chips"></div>' : "");
+      out.style.gridRow = String(index + 2);
+      lanes.appendChild(out);
 
-      const mid = document.createElement("div");
-      mid.className = "mid";
-      /* "Set" means "to 1" to anyone who writes ladder, so a step that puts
-         its bits back down says so on the arrow. */
-      const resets = /^(release|clear)\b/i.test(step.title);
-      mid.innerHTML = (sets ? `<div class="arw r set"><span>${resets ? "reset" : "set"}</span></div>` : "")
-        + (waits ? `<div class="arw l ans"><span>${step.blocking ? "wait for" : "read"}</span></div>` : "");
-
-      const inn = document.createElement("div");
-      inn.className = "box in" + (waits ? "" : " idle");
-      inn.innerHTML = waits
-        ? `<div class="bt">${sets ? "check" : esc(step.title)}<span class="tm"></span></div>`
-          + `<div class="chips"></div>`
-        : '<div class="bt">&hellip;</div>';
-
-      for (const part of [out, mid, inn]) part.style.gridRow = String(index + 2);
-      lanes.append(out, mid, inn);
+      let inn = null;
+      if (step.waits.length) {
+        inn = document.createElement("div");
+        inn.className = "box in";
+        inn.innerHTML = `<div class="bt">${esc(step.check)}<span class="tm"></span></div>`
+          + '<div class="chips"></div>';
+        inn.style.gridRow = String(index + 2);
+        lanes.appendChild(inn);
+      }
       cards.push({
-        parts: [out, mid, inn],
+        out, inn,
+        parts: inn ? [out, inn] : [out],
         outChips: out.querySelector(".chips"),
-        inChips: inn.querySelector(".chips"),
-        time: inn.querySelector(".tm"),
+        inChips: inn && inn.querySelector(".chips"),
+        time: inn && inn.querySelector(".tm"),
       });
     });
-    const span = `1 / span ${scenario.steps.length + 1}`;
-    for (const lane of lanes.querySelectorAll(".lane")) lane.style.gridRow = span;
+    const links = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    links.setAttribute("class", "links");
+    links.setAttribute("aria-hidden", "true");
+    lanes.appendChild(links);
     body.appendChild(lanes);
     view.appendChild(body);
 
@@ -806,7 +797,7 @@ function buildSequenceViews() {
 
     const bytes = sequenceBytes(scenario);
     seqViews[scenario.name] = {
-      view, cards, lanes, bytes,
+      view, cards, lanes, links, bytes, statuses: [], running: false,
       status: head.querySelector("[data-status]"),
       run: head.querySelector("[data-run]"),
       stop: head.querySelector("[data-stop]"),
@@ -816,6 +807,61 @@ function buildSequenceViews() {
     seq.run.disabled = !enabled(scenario.name);
     seq.run.onclick = () => post("/scenario", { name: scenario.name });
     seq.stop.onclick = () => post("/scenario", { action: "stop" });
+    /* Geometry comes from the laid-out boxes, so it is redrawn whenever the
+       lanes change size -- including the moment a hidden tab is shown. */
+    new ResizeObserver(() => drawLinks(seq)).observe(lanes);
+  }
+}
+
+/* One arrow, ending in a filled head whose tip touches the box edge. */
+function arrow(kind, index, [x1, y1], [x2, y2]) {
+  const dx = x2 - x1, dy = y2 - y1, length = Math.hypot(dx, dy) || 1;
+  const ux = dx / length, uy = dy / length;
+  const bx = x2 - ux * 10, by = y2 - uy * 10, px = -uy * 5, py = ux * 5;
+  const f = (v) => v.toFixed(1);
+  return `<g data-link="${kind}${index}">`
+    + `<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(bx)}" y2="${f(by)}"/>`
+    + `<path d="M${f(x2)} ${f(y2)}L${f(bx + px)} ${f(by + py)}L${f(bx - px)} ${f(by - py)}Z"/></g>`;
+}
+
+function drawLinks(seq) {
+  const base = seq.lanes.getBoundingClientRect();
+  if (!base.width) return;
+  const edge = (box, side) => {
+    const r = box.getBoundingClientRect();
+    return [(side === "right" ? r.right : r.left) - base.left, r.top + r.height / 2 - base.top];
+  };
+  let drawn = "";
+  seq.cards.forEach((card, index) => {
+    if (!card.inn) return;
+    drawn += arrow("h", index, edge(card.out, "right"), edge(card.inn, "left"));
+    const next = seq.cards[index + 1];
+    if (next) drawn += arrow("d", index, edge(card.inn, "left"), edge(next.out, "right"));
+  });
+  seq.links.setAttribute("width", base.width);
+  seq.links.setAttribute("height", base.height);
+  seq.links.innerHTML = drawn;
+  paintLinks(seq);
+}
+
+/* An across link follows its own step; a diagonal one lights up once the
+   answer it carries has led to the next action. */
+function paintLinks(seq) {
+  const st = seq.statuses;
+  for (const group of seq.links.querySelectorAll("[data-link]")) {
+    const kind = group.dataset.link[0];
+    const index = Number(group.dataset.link.slice(1));
+    let state = "";
+    if (kind === "h") {
+      state = st[index] || "";
+    } else if (st[index + 1] && st[index + 1] !== "pending") {
+      state = "done";
+    } else if (st[index] === "done" && seq.running) {
+      state = "running";
+    } else if (st[index]) {
+      state = "pending";
+    }
+    group.setAttribute("class", `lk ${kind} ${state}`);
   }
 }
 
@@ -890,6 +936,8 @@ function renderSequence(name, event) {
   const active = mine && ["running", "waiting", "preparing"].includes(state.status);
   const moved = changedFieldNames(event);
   seq.lanes.classList.toggle("running-seq", Boolean(active));
+  seq.running = Boolean(active);
+  seq.statuses = scenario.steps.map((_, index) => (mine ? state.steps[index] || "pending" : ""));
 
   scenario.steps.forEach((step, index) => {
     const slot = seq.cards[index];
@@ -935,6 +983,8 @@ function renderSequence(name, event) {
     : `step ${state.step + 1} of ${scenario.steps.length}`;
   seq.run.disabled = active || !enabled(name);
   seq.stop.disabled = !active;
+
+  paintLinks(seq);
 
   const pip = document.querySelector(`[data-pip="${name}"]`);
   if (pip) pip.className = "pip " + (!mine ? "" : active ? "run" : state.status);

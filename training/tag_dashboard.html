@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cyclic tags</title>
+<style>
+  /* --- Brand typeface ---
+     Archivo, per the Mecademic Brand Guide v1.0, self-hosted rather than
+     pulled from Google Fonts so the page renders correctly on a cell network
+     with no internet access. Licence: /fonts/Archivo-OFL.txt. */
+  @font-face {
+    font-family:"Archivo";
+    src:url("/fonts/Archivo-Variable.woff2") format("woff2");
+    font-weight:100 900; font-stretch:62% 125%; font-style:normal; font-display:swap;
+  }
+
+  /* Palette follows the brand guide's DARK MODE mapping:
+       MIDNIGHT #0C1A0F  main background      CLOUDS  #FCFDFC  primary text
+       FOREST   #122616  secondary background YUCATAN #5DEFBF  accent
+       ORIGINAL #009B72  dividers
+     Yellow / red / blue / orange are not brand colours; they stay because they
+     carry machine-state meaning, and amber marks the output half of a
+     handshake against the accent-green input half. */
+  :root {
+    --bg:#0C1A0F; --panel:#122616; --panel-2:#253728; --border:#2E4032;
+    --ink:#FCFDFC; --muted:#9aa39f; --faint:#6f7d73;
+    --accent:#5DEFBF; --accent-soft:#9DF5D7; --accent-2:#009B72;
+    --yellow:#ffd447; --red:#ff5a6b; --blue:#3bb8ff; --orange:#ff9b42;
+    --radius:6px; --radius-control:4px;
+  }
+  *,*::before,*::after { box-sizing:border-box; }
+  html { background:var(--bg); }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         font-size:14px; line-height:1.5; }
+  button,input,select { font-family:inherit; }
+  .mono,.grid,td.v,.chip .cv,.chip .cp,.bytestrip { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+
+  /* ------------------------------------------------------------- header */
+  header { position:sticky; top:0; z-index:9;
+           background:linear-gradient(180deg,var(--panel) 0%,var(--bg) 100%);
+           border-bottom:1px solid var(--accent-2); padding:10px 18px;
+           display:flex; flex-wrap:wrap; gap:6px 22px; align-items:baseline; }
+  header h1 { font-size:1em; margin:0 12px 0 0; font-weight:700; color:var(--accent);
+              letter-spacing:.01em; }
+  header .f { color:var(--muted); font-size:11px; font-weight:600;
+              letter-spacing:.06em; text-transform:uppercase; }
+  header .f b { color:var(--ink); font-weight:700; }
+  #dot { width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block; }
+  #dot.up { background:var(--accent); box-shadow:0 0 8px rgba(93,239,191,.5); }
+  .note { width:100%; color:var(--muted); font-size:11px; border-top:1px solid var(--border);
+          padding-top:7px; margin-top:2px; }
+
+  /* --------------------------------------------------------------- shell */
+  .shell { display:grid; grid-template-columns:1fr; gap:16px; padding:16px; align-items:start; }
+  @media (min-width:1000px) { .shell { grid-template-columns:232px 1fr; } }
+
+  nav.rail { background:linear-gradient(180deg,var(--panel) 0%,var(--bg) 100%);
+             border:1px solid var(--border); border-radius:var(--radius);
+             padding:12px; position:sticky; top:66px; display:flex;
+             flex-direction:column; gap:5px; }
+  nav.rail .grp { font-size:.72em; font-weight:700; text-transform:uppercase;
+                  letter-spacing:.14em; color:var(--muted);
+                  border-bottom:1px solid var(--accent-2);
+                  padding:0 0 7px; margin:14px 0 4px; }
+  nav.rail .grp:first-child { margin-top:2px; }
+  nav.rail button { width:100%; text-align:left; padding:9px 13px;
+                    background:rgba(255,255,255,.03); border:1px solid transparent;
+                    color:rgba(255,255,255,.62); font-size:.8em; font-weight:700;
+                    letter-spacing:.08em; text-transform:uppercase; cursor:pointer;
+                    border-radius:var(--radius-control); transition:all .2s ease; }
+  nav.rail button:hover { color:var(--accent); background:rgba(255,255,255,.06);
+                          transform:translateY(-1px); }
+  nav.rail button.on { color:var(--bg); background:var(--accent);
+                       border-color:var(--accent); transform:none; }
+  nav.rail button .pip { float:right; width:7px; height:7px; border-radius:50%; margin-top:5px; }
+  nav.rail button .pip.run { background:var(--blue); animation:pulse 1s ease-in-out infinite; }
+  nav.rail button .pip.preparing { background:var(--blue); opacity:.5; }
+  nav.rail button .pip.done { background:var(--accent); }
+  nav.rail button.on .pip.done { background:var(--bg); }
+  nav.rail button .pip.failed { background:var(--red); }
+  @keyframes pulse { 50% { opacity:.25; } }
+
+  .view { display:none; flex-direction:column; gap:16px; }
+  .view.on { display:flex; }
+
+  /* A grid or flex child defaults to min-width:auto, so it stretches to its
+     widest content instead of letting that content scroll.  The hex rows are
+     nowrap and 448px wide, which without this pushed the whole page sideways
+     on a narrow window rather than scrolling inside .hexwrap. */
+  #views, .view, .cols, .cols > *, .stack, .stack > *, section { min-width:0; }
+
+  section { background:var(--panel); border:1px solid var(--border);
+            border-radius:var(--radius); padding:14px 16px; }
+  /* Title left, hint right, on one baseline.  A float here dropped the hint
+     onto a second line and into the rule below it as soon as the two no longer
+     fitted side by side; flex wrapping keeps the row gap instead. */
+  section > h2 { display:flex; flex-wrap:wrap; align-items:baseline;
+                 column-gap:14px; row-gap:4px;
+                 font-size:.72em; margin:0 0 12px; font-weight:700;
+                 text-transform:uppercase; letter-spacing:.14em; color:var(--muted);
+                 border-bottom:1px solid var(--accent-2); padding-bottom:8px; }
+  section > h2 .hint { margin-left:auto; text-transform:none; letter-spacing:.02em;
+                       font-weight:500; color:var(--faint); font-size:1.05em;
+                       text-align:right; }
+  .cols { display:grid; gap:16px; grid-template-columns:1fr; align-items:start; }
+  /* A 16-byte row needs 480px inside the column; narrower and the grid would
+     scroll sideways, which is the one thing a frame layout must not do. */
+  @media (min-width:1340px) { .cols { grid-template-columns:minmax(480px,.78fr) 1.22fr; } }
+  .stack { display:flex; flex-direction:column; gap:16px; }
+
+  /* ------------------------------------------------------ a sequence tab */
+  .badges { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:9px; }
+  .badge { font-size:.68em; letter-spacing:.12em; text-transform:uppercase; font-weight:700;
+           border-radius:var(--radius-control); padding:3px 8px;
+           background:rgba(255,255,255,.06); color:var(--muted);
+           border:1px solid rgba(255,255,255,.1); }
+  .badge.prep  { background:rgba(59,184,255,.16); color:var(--blue); border-color:rgba(59,184,255,.3); }
+  .badge.moves { background:rgba(255,212,71,.16); color:var(--yellow); border-color:rgba(255,212,71,.3); }
+  .badge.off   { background:rgba(255,90,107,.16); color:var(--red); border-color:rgba(255,90,107,.3); }
+  .seqhead h2 { display:block; font-size:1.5em; margin:0 0 8px; font-weight:700;
+                color:var(--accent); border:0; padding:0; text-transform:none;
+                letter-spacing:0; }
+  .lead { color:var(--muted); font-size:13px; margin:0 0 12px; }
+
+  /* The description, as three tiles rather than a paragraph: how the command
+     is triggered, what confirms it, and the one trap. */
+  .facts { display:grid; gap:8px; grid-template-columns:1fr; }
+  @media (min-width:900px) { .facts { grid-template-columns:1.05fr 1fr 1.25fr; } }
+  .fact { display:flex; gap:11px; align-items:center; padding:10px 12px;
+          border-radius:var(--radius-control); background:rgba(255,255,255,.03);
+          border:1px solid rgba(255,255,255,.07); border-left-width:3px; min-width:0; }
+  .fact svg { width:34px; height:26px; flex:none; fill:none; stroke:currentColor;
+              stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .fact b { display:block; font-size:.64em; font-weight:700; letter-spacing:.14em;
+            text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
+  .fact span { display:block; font-size:12.5px; font-weight:600; color:var(--ink);
+               line-height:1.35; overflow-wrap:anywhere; }
+  .fact.mech { border-left-color:var(--orange); color:var(--orange); }
+  .fact.conf { border-left-color:var(--accent); color:var(--accent); }
+  .fact.conf span { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+                    font-size:12px; color:var(--accent-soft); }
+  .fact.warn { border-left-color:var(--yellow); color:var(--yellow); }
+
+  .runbar { display:flex; gap:9px; align-items:center; margin-top:14px; flex-wrap:wrap;
+            border-top:1px solid var(--border); padding-top:12px; }
+  .status { font-size:.78em; font-weight:700; letter-spacing:.08em;
+            text-transform:uppercase; color:var(--muted); }
+  .status.done { color:var(--accent); } .status.failed { color:var(--red); }
+  .status.preparing,.status.running,.status.waiting { color:var(--blue); }
+
+  button.act { padding:9px 16px; font-size:.8em; font-weight:700; letter-spacing:.08em;
+               text-transform:uppercase; cursor:pointer; color:var(--ink);
+               border:1px solid rgba(255,255,255,.08); border-radius:var(--radius-control);
+               background:linear-gradient(180deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,.06) 100%);
+               box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+               transition:filter .15s ease,transform .1s ease; }
+  button.act:hover:not(:disabled) { filter:brightness(1.12); }
+  button.act:active:not(:disabled) { transform:scale(.98); }
+  button.act:disabled { opacity:.35; cursor:not-allowed; }
+  button.act.go { background:rgba(93,239,191,.18); color:var(--accent); border-color:rgba(93,239,191,.3); }
+  button.act.halt { background:rgba(255,90,107,.18); color:var(--red); border-color:rgba(255,90,107,.3); }
+  button.act.move { background:rgba(255,212,71,.16); color:var(--yellow); border-color:rgba(255,212,71,.3); }
+
+  /* ---- the exchange: two lanes, the scanner's on the left, the robot's on
+     the right, and what crosses between them drawn as arrows ---- */
+  .lanes { display:grid; grid-template-columns:minmax(0,1fr) 116px minmax(0,1fr);
+           row-gap:12px; padding-bottom:14px; }
+  /* Every item in the lanes is placed on an explicit row by the script.  Left
+     to auto-placement, items skip cells a lane frame already covers, so the
+     frames spanned empty rows at the top and the steps landed below them. */
+  .lane { border-radius:var(--radius); pointer-events:none; }
+  .lanehead { grid-row:1; }
+  .lane.o { grid-column:1; border:1px solid rgba(255,155,66,.38); background:rgba(255,155,66,.025); }
+  .lane.i { grid-column:3; border:1px dashed rgba(93,239,191,.45); background:rgba(93,239,191,.02); }
+  .lanehead { position:relative; text-align:center; padding:10px 8px 8px; font-size:.78em;
+              font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+  .lanehead small { display:block; font-size:.82em; font-weight:500; letter-spacing:.04em;
+                    text-transform:none; color:var(--faint); margin-top:1px; }
+  .lanehead.o { grid-column:1; color:var(--orange); border-bottom:1px solid rgba(255,155,66,.38); }
+  .lanehead.i { grid-column:3; color:var(--accent); border-bottom:1px dashed rgba(93,239,191,.45); }
+
+  .box { position:relative; margin:0 12px; padding:9px 11px; min-width:0;
+         border:1px solid var(--border); border-radius:var(--radius-control);
+         background:var(--panel); align-self:center;
+         transition:border-color .3s ease, box-shadow .3s ease, opacity .3s ease; }
+  .box.out { grid-column:1; }
+  .box.in  { grid-column:3; }
+  .box.idle { border-style:dashed; background:transparent; }
+  .box .bt { display:flex; align-items:center; gap:8px; font-size:.72em; font-weight:700;
+             letter-spacing:.08em; text-transform:uppercase; color:var(--ink); }
+  .box.idle .bt { color:var(--faint); justify-content:center; }
+  .box .chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+  .box .tm { margin-left:auto; text-transform:none; letter-spacing:.02em; font-weight:500;
+             color:var(--faint); white-space:nowrap;
+             font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  .n { flex:none; width:20px; height:20px; border-radius:50%; background:var(--panel-2);
+       border:1px solid var(--border); font-size:10.5px; letter-spacing:0; text-align:center;
+       line-height:18px; color:var(--muted); transition:all .3s ease; }
+
+  /* Arrows reach across the lane borders to the boxes themselves. */
+  .mid { grid-column:2; display:flex; flex-direction:column; justify-content:center;
+         gap:14px; margin:0 -12px; align-self:center; transition:opacity .3s ease; }
+  .arw { position:relative; height:14px; text-align:center; font-size:9.5px; font-weight:700;
+         letter-spacing:.12em; text-transform:uppercase; line-height:14px; }
+  .arw::before { content:""; position:absolute; left:0; right:0; top:50%; height:2px;
+                 margin-top:-1px; background:currentColor; opacity:.85; }
+  .arw span { position:relative; background:var(--panel); padding:0 6px; }
+  .arw::after { content:""; position:absolute; top:50%; margin-top:-5px;
+                border:5px solid transparent; }
+  .arw.r::after { right:-2px; border-left:8px solid currentColor; border-right:0; }
+  .arw.l::after { left:-2px;  border-right:8px solid currentColor; border-left:0; }
+  .arw.set { color:var(--orange); }
+  .arw.ans { color:var(--accent); }
+
+  /* While a sequence runs: what is still to come recedes, the step in
+     progress is blue and its arrows move, an answered step carries a tick. */
+  .running-seq .pending { opacity:.38; }
+  .box.running,.box.waiting { border-color:var(--blue); box-shadow:0 0 16px rgba(59,184,255,.18); }
+  .box.running .n,.box.waiting .n { background:var(--blue); border-color:var(--blue); color:var(--bg); }
+  .box.waiting .n { animation:pulse 1s ease-in-out infinite; }
+  .mid.waiting .arw.ans,.mid.running .arw.set { animation:flow .9s ease-in-out infinite; }
+  @keyframes flow { 50% { opacity:.35; } }
+  .box.done { border-color:rgba(93,239,191,.4); }
+  .box.done .n { background:var(--accent); border-color:var(--accent); color:var(--bg); }
+  .box.in.done .tm { color:var(--accent); }
+  .box.timeout { border-color:var(--red); box-shadow:0 0 14px rgba(255,90,107,.18); }
+  .box.timeout .n { background:var(--red); border-color:var(--red); color:var(--bg); }
+  .box.in.timeout .tm { color:var(--red); }
+
+  @media (max-width:760px) {
+    .lanes { grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr); }
+    .arw span { display:none; }
+  }
+
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; min-width:0;
+          border-radius:var(--radius-control); font-size:11px;
+          background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+          transition:background .45s ease, border-color .45s ease; }
+  .chip.out { border-left:2px solid var(--orange); }
+  .chip.in  { border-left:2px solid var(--accent); }
+  .chip .cn { font-weight:600; color:var(--ink); overflow-wrap:anywhere; }
+  .chip .cp { color:var(--faint); font-size:10px; }
+  .chip .cv { color:var(--yellow); font-weight:700; white-space:nowrap; }
+  .chip.in .cv { color:var(--accent-soft); }
+  .chip .led { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.14);
+               flex:none; transition:all .3s ease; }
+  .chip .led.on { background:var(--accent); box-shadow:0 0 7px var(--accent); }
+  .chip.out .led.on { background:var(--orange); box-shadow:0 0 7px var(--orange); }
+  .chip.moved { background:rgba(59,184,255,.22); border-color:var(--blue); transition:none; }
+
+  /* the bytes a sequence touches: the wire, without reading 252 of them */
+  .bytestrip { display:flex; flex-wrap:wrap; gap:3px; font-size:11.5px; }
+  .bytestrip .bb { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+                   border-radius:var(--radius-control); padding:2px 5px; color:var(--faint);
+                   transition:background .5s ease,color .5s ease,border-color .5s ease; }
+  .bytestrip .bb b { color:var(--ink); font-weight:700; }
+  .bytestrip .bb.c { background:rgba(59,184,255,.26); border-color:var(--blue); transition:none; }
+  .bytestrip .bb.c b { color:#fff; }
+
+  /* ---------------------------------------------------------- hex grids */
+  /* Byte groups are contiguous runs, so only *adjacent* groups ever need to
+     differ: five cycling tints do what twenty distinct colours could not, and
+     leave the saturated blue free to mean "this byte just changed". */
+  .grid { font-size:11.5px; line-height:1.7; }
+  .legend { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:11px; }
+  .legend button { display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+       background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07);
+       border-radius:var(--radius-control); padding:3px 8px; font-size:10.5px;
+       color:var(--muted); transition:all .15s ease; }
+  .legend button:hover { border-color:var(--accent); color:var(--ink); }
+  .legend button.on { border-color:var(--accent); color:var(--ink);
+       background:rgba(93,239,191,.1); }
+  .legend .sw { width:9px; height:9px; border-radius:2px; flex:none;
+       border:1px solid rgba(255,255,255,.14); }
+  .legend .gn { font-weight:700; letter-spacing:.03em; color:var(--ink); }
+  .legend .gr { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+       color:var(--faint); }
+  .legend button.void .sw { background:transparent; border-style:dashed; }
+
+  /* The hex rows and the tag rows are both nowrap and wider than a narrow
+     window; each scrolls inside its own panel instead of taking the page
+     sideways with it. */
+  .hexwrap,.tablewrap { overflow-x:auto; }
+  .row { display:flex; align-items:center; white-space:nowrap; }
+  .off { color:var(--muted); width:34px; text-align:right; padding-right:9px; flex:none;
+         font-variant-numeric:tabular-nums; }
+  .ruler { color:var(--muted); font-size:10px; letter-spacing:.06em;
+           border-bottom:1px solid var(--border); padding-bottom:3px; margin-bottom:4px; }
+  .ruler .b { background:none; color:var(--muted); font-weight:400; }
+  .b { width:22px; text-align:center; border-radius:2px; flex:none;
+       margin-right:2px; background:rgba(255,255,255,.03); color:var(--ink);
+       font-weight:600; font-variant-numeric:tabular-nums;
+       transition:background .5s ease,color .5s ease,opacity .15s ease; }
+  /* A four-byte rhythm: the eye finds byte 11 without counting to eleven. */
+  .b.q { margin-left:7px; }
+  /* Zero bytes step back so the live ones carry the frame -- by weight as well
+     as colour, because weight survives a projector and a dim room. */
+  .b.z { color:var(--muted); font-weight:400; }
+  .b.void { background:none; border:1px dashed rgba(255,255,255,.1); color:var(--faint); }
+  /* Where one group ends and the next begins. */
+  .b.bnd { box-shadow:inset 2px 0 0 var(--accent-2); }
+  .b.c { background:var(--blue) !important; color:var(--bg); font-weight:700; transition:none; }
+  .b.hl { outline:1px solid var(--accent); outline-offset:-1px; }
+  .b.dim { opacity:.12; }
+  .gutter { color:var(--faint); font-size:10px; padding-left:10px; font-weight:700;
+            letter-spacing:.05em; }
+
+  /* --------------------------------------------------------------- tags */
+  .bar { display:flex; gap:10px; align-items:center; margin-bottom:9px; flex-wrap:wrap; }
+  .bar input[type=search] { flex:1 1 180px; min-width:130px; background:rgba(0,0,0,.25);
+       color:var(--ink); border:1px solid var(--border); border-radius:var(--radius-control);
+       padding:6px 9px; font-size:13px; }
+  .bar input[type=search]:focus { outline:none; border-color:var(--accent); }
+  .bar label { color:var(--muted); font-size:11px; font-weight:600; letter-spacing:.06em;
+               text-transform:uppercase; display:flex; gap:5px; align-items:center; cursor:pointer; }
+  .bar input[type=checkbox] { accent-color:var(--accent); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; color:var(--muted); font-weight:700; font-size:10px;
+       letter-spacing:.1em; text-transform:uppercase; padding:4px 6px; position:sticky; top:0;
+       background:var(--panel); border-bottom:1px solid var(--accent-2); z-index:1; }
+  td { padding:2px 6px; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:top; }
+  tr.g td { background:rgba(0,155,114,.12); color:var(--accent); font-weight:700;
+            padding-top:6px; font-size:11px; letter-spacing:.06em; }
+  tr.changed td { background:rgba(59,184,255,.1); }
+  tr.watch td { background:rgba(93,239,191,.08); box-shadow:inset 2px 0 0 var(--accent); }
+  td.n { white-space:nowrap; } td.p,td.t { color:var(--faint); white-space:nowrap; }
+  td.v { white-space:nowrap; }
+  .led { display:inline-block; width:8px; height:8px; border-radius:50%;
+         background:rgba(255,255,255,.14); margin-right:6px; }
+  .led.on { background:var(--accent); box-shadow:0 0 6px var(--accent); }
+
+  #cmds { display:flex; gap:7px; flex-wrap:wrap; }
+  #toast { position:fixed; right:18px; bottom:18px; max-width:420px; padding:11px 15px;
+           background:var(--panel-2); border:1px solid var(--border);
+           border-left:3px solid var(--accent); border-radius:var(--radius);
+           font-size:13px; opacity:0; transition:opacity .25s; pointer-events:none; z-index:20;
+           box-shadow:0 20px 50px rgba(0,0,0,.45); }
+  #toast.show { opacity:1; } #toast.bad { border-left-color:var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cyclic tags</h1>
+  <span class="f"><span id="dot"></span> <b id="target">connecting</b></span>
+  <span class="f">layout <b id="ver">-</b></span>
+  <span class="f">path <b id="path">-</b></span>
+  <span class="f">RPI <b id="rpi">-</b></span>
+  <span class="f">in <b id="inInfo">-</b></span>
+  <span class="f">out <b id="outInfo">-</b></span>
+  <span class="f">sample <b id="seq">0</b></span>
+  <span class="f">rate <b id="rate">-</b></span>
+  <div class="note" id="note"></div>
+</header>
+
+<div class="shell">
+  <nav class="rail" id="rail"></nav>
+
+  <div id="views">
+    <div class="view" id="view-live">
+      <div class="cols">
+        <div class="stack">
+          <section>
+            <h2>Input image &mdash; robot to scanner<span class="hint" id="inSub"></span></h2>
+            <div class="grid" id="inGrid"></div>
+          </section>
+          <section>
+            <h2>Output image &mdash; scanner to robot<span class="hint" id="outSub"></span></h2>
+            <div class="grid" id="outGrid"></div>
+          </section>
+          <section id="cmdPanel" hidden>
+            <h2>Commands</h2>
+            <div id="cmds"></div>
+          </section>
+        </div>
+
+        <section>
+          <h2>Tags<span class="hint">hover a name for its description</span></h2>
+          <div class="bar">
+            <input type="search" id="filter" placeholder="filter by name, group or unit">
+            <label><input type="checkbox" id="onlyChanged"> changed</label>
+            <label><input type="checkbox" id="onlyStep"> step tags</label>
+            <label><input type="checkbox" id="showOutput" checked> output</label>
+          </div>
+          <div class="tablewrap"><table><thead><tr>
+            <th>tag</th><th>position</th><th>type</th><th>value</th>
+          </tr></thead><tbody id="tags"></tbody></table></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let layout = null, cells = {}, rows = [], fieldsByName = {};
+let lastSeq = 0, lastAt = 0, lastEvent = null;
+let tab = "live";
+let seqViews = {};
+let legends = {}, pinned = { in: null, out: null };
+
+/* Five muted tints, cycled in offset order. Byte groups are contiguous runs,
+   so only adjacent groups ever need to differ -- which is what makes five
+   enough for the twenty-odd groups an assembly carries, and what keeps the
+   saturated blue free to mean "this byte just changed". */
+const TINTS = [
+  "hsl(158 26% 19%)", "hsl(196 20% 22%)", "hsl(132 22% 25%)",
+  "hsl(221 16% 23%)", "hsl(174 30% 16%)",
+];
+const scenarioByName = (name) => layout.scenarios.find((s) => s.name === name);
+const position = (f) => f.bitOffset === null ? `${f.byteOffset}` : `${f.byteOffset}.${f.bitOffset}`;
+/* Under a group heading the prefix is said twice, so the table drops it.  A
+   field that *is* its group -- MotionCommand, DynamicDataCycles -- has no
+   prefix to drop and keeps its whole name. */
+const shortName = (f) => f.name.startsWith(f.group + "_")
+  ? f.name.slice(f.group.length + 1) : f.name;
+const enabled = (name) => layout.allowedScenarios.includes(name);
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
+/* ------------------------------------------------------------------ grids */
+/* Which group owns each byte: the field prefix, "" when the byte is mapped to
+   nothing, and "mixed" when fields of different groups share it. */
+function byteGroups(assembly) {
+  const owned = [];
+  for (let i = 0; i < assembly.sizeBytes; i++) {
+    const owners = assembly.byteOwners[i] || [];
+    if (!owners.length) { owned.push(""); continue; }
+    const first = owners[0].split("_")[0];
+    owned.push(owners.every((o) => o.split("_")[0] === first) ? first : "mixed");
+  }
+  return owned;
+}
+
+function buildGrid(container, assembly, prefix) {
+  container.textContent = "";
+  cells[prefix] = [];
+  const owned = byteGroups(assembly);
+
+  /* One tint per group, assigned in offset order, so neighbours never match. */
+  const order = [];
+  for (const group of owned) if (group && !order.includes(group)) order.push(group);
+  const tintOf = {};
+  order.forEach((group, index) => { tintOf[group] = TINTS[index % TINTS.length]; });
+
+  const legend = document.createElement("div");
+  legend.className = "legend";
+  container.appendChild(legend);
+
+  const wrap = document.createElement("div");
+  wrap.className = "hexwrap";
+  container.appendChild(wrap);
+
+  /* A ruler, so a byte number is read off the grid instead of counted out. */
+  const ruler = document.createElement("div");
+  ruler.className = "row ruler";
+  ruler.innerHTML = '<span class="off">byte</span>'
+    + Array.from({ length: 16 }, (_, c) =>
+        `<span class="b${c % 4 === 0 && c ? " q" : ""}">+${c}</span>`).join("");
+  wrap.appendChild(ruler);
+
+  for (let start = 0; start < assembly.sizeBytes; start += 16) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const off = document.createElement("span");
+    off.className = "off"; off.textContent = start;
+    row.appendChild(off);
+    for (let i = start; i < Math.min(start + 16, assembly.sizeBytes); i++) {
+      const owners = assembly.byteOwners[i] || [];
+      const group = owned[i];
+      const column = i - start;
+      const cell = document.createElement("span");
+      cell.className = "b" + (group ? "" : " void")
+        + (column % 4 === 0 && column ? " q" : "")
+        + (i && owned[i - 1] !== group ? " bnd" : "");
+      cell.textContent = "00";
+      cell.dataset.group = group;
+      if (group) cell.style.background = tintOf[group] || "";
+      cell.title = owners.length
+        ? `byte ${i} \u00b7 ${group}\n${owners.join("\n")}`
+        : `byte ${i}\nnot mapped by the vendor file`;
+      row.appendChild(cell);
+      cells[prefix].push(cell);
+    }
+    wrap.appendChild(row);
+  }
+
+  /* The legend is what actually answers "which bytes are this group?": each
+     entry names a group, gives its byte range, and isolates it on hover. */
+  const ranges = {};
+  owned.forEach((group, i) => {
+    if (!group) return;
+    const seen = ranges[group] || (ranges[group] = { first: i, last: i, count: 0 });
+    seen.last = i; seen.count += 1;
+  });
+  for (const group of order) {
+    const span = ranges[group];
+    const entry = document.createElement("button");
+    entry.innerHTML = `<span class="sw" style="background:${tintOf[group]}"></span>`
+      + `<span class="gn">${group}</span>`
+      + `<span class="gr">${span.first}&ndash;${span.last}</span>`;
+    entry.title = `${span.count} byte(s) of ${assembly.name} carry ${group} fields`;
+    entry.onmouseenter = () => isolate(prefix, group);
+    entry.onmouseleave = () => isolate(prefix, pinned[prefix]);
+    entry.onclick = () => { pinned[prefix] = pinned[prefix] === group ? "" : group;
+                            isolate(prefix, pinned[prefix]); };
+    entry.dataset.group = group;
+    legend.appendChild(entry);
+  }
+  if (assembly.unmapped.length) {
+    const entry = document.createElement("button");
+    entry.className = "void";
+    entry.innerHTML = '<span class="sw"></span><span class="gn">unmapped</span>'
+      + `<span class="gr">${assembly.unmapped.length} bytes</span>`;
+    entry.title = "carried by the assembly but mapped to no field by the vendor file";
+    entry.onmouseenter = () => isolate(prefix, "");
+    entry.onmouseleave = () => isolate(prefix, pinned[prefix]);
+    entry.onclick = () => { pinned[prefix] = pinned[prefix] === "" ? null : "";
+                            isolate(prefix, pinned[prefix]); };
+    entry.dataset.group = "";
+    legend.appendChild(entry);
+  }
+  legends[prefix] = legend;
+}
+
+/* Dim every byte outside one group, so a group can be seen as a shape. */
+function isolate(prefix, group) {
+  const showing = group !== null && group !== undefined;
+  for (const cell of cells[prefix] || []) {
+    cell.classList.toggle("dim", showing && cell.dataset.group !== group);
+  }
+  for (const entry of (legends[prefix] || { children: [] }).children) {
+    entry.classList.toggle("on", showing && entry.dataset.group === group);
+  }
+}
+
+function applyGrid(prefix, hex, changed) {
+  const list = cells[prefix], flash = new Set(changed);
+  for (let i = 0; i < list.length; i++) {
+    const cell = list[i];
+    const value = hex.substr(i * 2, 2);
+    if (cell.textContent !== value) cell.textContent = value;
+    cell.classList.toggle("z", value === "00");
+    if (flash.has(i)) {
+      cell.classList.add("c");
+      requestAnimationFrame(() => requestAnimationFrame(() => cell.classList.remove("c")));
+    }
+  }
+}
+
+function highlightStepBytes() {
+  for (const prefix of ["in", "out"]) {
+    for (const cell of cells[prefix] || []) cell.classList.remove("hl");
+  }
+  const step = focusedStep();
+  if (!step) return;
+  for (const [names, prefix] of [[step.sets, "out"], [step.waits, "in"]]) {
+    for (const name of names) {
+      const field = fieldsByName[prefix + name];
+      if (!field) continue;
+      for (let b = field.byteOffset; b < field.endByteOffset; b++) {
+        if (cells[prefix][b]) cells[prefix][b].classList.add("hl");
+      }
+    }
+  }
+}
+
+/* ------------------------------------------------------------------- tags */
+function buildTags() {
+  const body = $("tags");
+  body.textContent = ""; rows = []; fieldsByName = {};
+  for (const [assembly, which] of [[layout.input, "in"], [layout.output, "out"]]) {
+    let group = null;
+    for (const field of assembly.fields) {
+      fieldsByName[which + field.name] = field;
+      if (field.group !== group) {
+        group = field.group;
+        const head = document.createElement("tr");
+        head.className = "g";
+        const cell = document.createElement("td");
+        cell.colSpan = 4;
+        cell.textContent = `${group}  ·  ${which === "in" ? "input" : "output"}`;
+        head.appendChild(cell);
+        body.appendChild(head);
+        rows.push({ head: true, which, group, tr: head });
+      }
+      const tr = document.createElement("tr");
+      /* The tooltip keeps the full name: it is what an integrator types into
+         their own configuration, so it must stay one hover away. */
+      const full = field.name + (field.description ? "\n\n" + field.description : "");
+      tr.innerHTML =
+        `<td class="n" title="${esc(full)}">`
+        + `${field.type === "bool" ? '<span class="led"></span>' : ""}`
+        + `${esc(shortName(field))}</td>`
+        + `<td class="p">byte ${position(field)}</td><td class="t">${field.type}</td>`
+        + `<td class="v"></td>`;
+      body.appendChild(tr);
+      rows.push({ head: false, which, group, tr, field,
+                  value: tr.querySelector("td.v"), led: tr.querySelector(".led"),
+                  hay: (field.name + " " + field.group + " " + (field.unit || "")).toLowerCase() });
+    }
+  }
+}
+
+function changedFieldNames(event) {
+  const names = new Set();
+  for (const [assembly, which, changed] of [
+    [layout.input, "in", event.changedInput], [layout.output, "out", event.changedOutput],
+  ]) {
+    const touched = new Set(changed);
+    for (const field of assembly.fields) {
+      for (let b = field.byteOffset; b < field.endByteOffset; b++) {
+        if (touched.has(b)) { names.add(which + field.name); break; }
+      }
+    }
+  }
+  return names;
+}
+
+function applyTags(event) {
+  const needle = $("filter").value.trim().toLowerCase();
+  const onlyChanged = $("onlyChanged").checked;
+  const onlyStep = $("onlyStep").checked;
+  const withOutput = $("showOutput").checked;
+  const step = focusedStep();
+  const watched = new Set();
+  if (step) {
+    for (const n of step.sets) watched.add("out" + n);
+    for (const n of step.waits) watched.add("in" + n);
+  }
+  const changedNames = changedFieldNames(event);
+  const visible = new Set();
+  for (const row of rows) {
+    if (row.head) continue;
+    const key = row.which + row.field.name;
+    const values = row.which === "in" ? event.inputValues : event.outputValues;
+    const text = values[row.field.name];
+    if (row.value.textContent !== text) row.value.textContent = text;
+    if (row.led) row.led.classList.toggle("on", text === "true");
+    row.tr.classList.toggle("changed", changedNames.has(key));
+    row.tr.classList.toggle("watch", watched.has(key));
+    const show = (row.which === "in" || withOutput)
+      && (!needle || row.hay.includes(needle))
+      && (!onlyChanged || changedNames.has(key))
+      && (!onlyStep || watched.has(key));
+    row.tr.hidden = !show;
+    if (show) visible.add(row.which + row.group);
+  }
+  for (const row of rows) if (row.head) row.tr.hidden = !visible.has(row.which + row.group);
+}
+
+/* --------------------------------------------------------------- the rail */
+function buildRail() {
+  const rail = $("rail");
+  rail.textContent = "";
+  const live = document.createElement("button");
+  live.textContent = "Live view";
+  live.dataset.tab = "live";
+  live.onclick = () => selectTab("live");
+  rail.appendChild(live);
+
+  for (const group of layout.scenarioGroups) {
+    const members = layout.scenarios.filter((s) => s.group === group.name);
+    if (!members.length) continue;
+    const heading = document.createElement("div");
+    heading.className = "grp";
+    heading.textContent = group.title;
+    heading.title = group.summary;
+    rail.appendChild(heading);
+    for (const scenario of members) {
+      const button = document.createElement("button");
+      button.dataset.tab = scenario.name;
+      button.innerHTML = `<span class="pip" data-pip="${scenario.name}"></span>${esc(scenario.label)}`;
+      /* The title carries the summary on hover, so name the button explicitly:
+         otherwise the tooltip becomes its accessible name and a screen reader
+         announces a paragraph where a label belongs. */
+      button.setAttribute("aria-label", scenario.label);
+      button.title = scenario.summary
+        + (enabled(scenario.name) ? "" : "\n\n(reading only: not enabled on the command line)");
+      button.onclick = () => selectTab(scenario.name);
+      rail.appendChild(button);
+    }
+  }
+}
+
+function selectTab(name) {
+  tab = name;
+  for (const button of $("rail").children) {
+    if (button.dataset) button.classList.toggle("on", button.dataset.tab === name);
+  }
+  for (const view of $("views").children) {
+    view.classList.toggle("on", view.id === "view-" + name);
+  }
+  if (lastEvent) render(lastEvent);
+}
+
+/* ---------------------------------------------------- one tab per sequence */
+/* A glyph per trigger, drawn as the signal itself: a level held then
+   released, a single rising edge, a request and its echo, a value held high,
+   a slot asked for and answered. */
+const GLYPHS = {
+  level: '<path d="M2 20H9V5H24V20H32"/>',
+  edge: '<path d="M2 20H16V5H32"/><path d="M12 12L16 8L20 12"/>',
+  handshake: '<path d="M3 8H27"/><path d="M23 4L27 8L23 12"/><path d="M31 17H7"/><path d="M11 13L7 17L11 21"/>',
+  held: '<path d="M2 20H7V5H32"/><path d="M14 5V9M20 5V9M26 5V9"/>',
+  slot: '<rect x="3" y="4" width="28" height="17" rx="2"/><path d="M9 12.5H24"/><path d="M20 9L24 12.5L20 16"/>',
+};
+const ICON_CONFIRM = '<path d="M5 13L13 20L29 5"/>';
+const ICON_WATCH = '<path d="M17 3L32 22H2Z"/><path d="M17 10V15"/><path d="M17 18.5V19"/>';
+const svg = (paths) => `<svg viewBox="0 0 34 24" aria-hidden="true">${paths}</svg>`;
+
+function buildSequenceViews() {
+  for (const scenario of layout.scenarios) {
+    const view = document.createElement("div");
+    view.className = "view";
+    view.id = "view-" + scenario.name;
+
+    const badges = [];
+    if (scenario.requires) {
+      badges.push(`<span class="badge prep">prepared: robot ${scenario.requires}</span>`);
+    }
+    if (scenario.needsMotion) badges.push('<span class="badge moves">moves the robot</span>');
+    if (scenario.needsSimulator) badges.push('<span class="badge">simulator only</span>');
+    if (!enabled(scenario.name)) badges.push('<span class="badge off">not enabled</span>');
+
+    /* The description: one line, then three tiles. */
+    const head = document.createElement("section");
+    head.className = "seqhead";
+    head.innerHTML = `<div class="badges">${badges.join("")}</div>`
+      + `<h2>${esc(scenario.label)}</h2>`
+      + `<p class="lead">${esc(scenario.summary)}</p>`
+      + `<div class="facts">`
+      + `<div class="fact mech">${svg(GLYPHS[scenario.kind] || GLYPHS.level)}`
+      + `<div><b>Trigger</b><span>${esc(scenario.mechanic)}</span></div></div>`
+      + `<div class="fact conf">${svg(ICON_CONFIRM)}`
+      + `<div><b>Confirmed by</b><span>${esc(scenario.confirms)}</span></div></div>`
+      + `<div class="fact warn">${svg(ICON_WATCH)}`
+      + `<div><b>Watch out</b><span>${esc(scenario.watch)}</span></div></div>`
+      + `</div>`
+      + `<div class="runbar">`
+      + `<button class="act go" data-run="${scenario.name}">Run</button>`
+      + `<button class="act halt" data-stop="${scenario.name}" disabled>Stop</button>`
+      + `<span class="status" data-status="${scenario.name}"></span></div>`;
+    view.appendChild(head);
+
+    /* The exchange: the scanner's lane, what crosses, the robot's lane. */
+    const body = document.createElement("section");
+    body.innerHTML = '<h2>The exchange<span class="hint">one row per step, read left to right</span></h2>';
+    const lanes = document.createElement("div");
+    lanes.className = "lanes";
+    lanes.innerHTML = '<div class="lane o"></div><div class="lane i"></div>'
+      + '<div class="lanehead o">Output<small>scanner &rarr; robot</small></div>'
+      + '<div class="lanehead i">Input<small>robot &rarr; scanner</small></div>';
+    const cards = [];
+    scenario.steps.forEach((step, index) => {
+      const sets = step.sets.length > 0;
+      const waits = step.waits.length > 0;
+      const number = `<span class="n">${index + 1}</span>`;
+
+      /* A step that writes is titled where it writes; one that only waits is
+         titled where it waits, and its output box says nothing changed. */
+      const out = document.createElement("div");
+      out.className = "box out" + (sets ? "" : " idle");
+      out.innerHTML = sets
+        ? `<div class="bt">${number}${esc(step.title)}</div><div class="chips"></div>`
+        : `<div class="bt">${number}&hellip; unchanged</div>`;
+
+      const mid = document.createElement("div");
+      mid.className = "mid";
+      /* "Set" means "to 1" to anyone who writes ladder, so a step that puts
+         its bits back down says so on the arrow. */
+      const resets = /^(release|clear)\b/i.test(step.title);
+      mid.innerHTML = (sets ? `<div class="arw r set"><span>${resets ? "reset" : "set"}</span></div>` : "")
+        + (waits ? `<div class="arw l ans"><span>${step.blocking ? "wait for" : "read"}</span></div>` : "");
+
+      const inn = document.createElement("div");
+      inn.className = "box in" + (waits ? "" : " idle");
+      inn.innerHTML = waits
+        ? `<div class="bt">${sets ? "check" : esc(step.title)}<span class="tm"></span></div>`
+          + `<div class="chips"></div>`
+        : '<div class="bt">&hellip;</div>';
+
+      for (const part of [out, mid, inn]) part.style.gridRow = String(index + 2);
+      lanes.append(out, mid, inn);
+      cards.push({
+        parts: [out, mid, inn],
+        outChips: out.querySelector(".chips"),
+        inChips: inn.querySelector(".chips"),
+        time: inn.querySelector(".tm"),
+      });
+    });
+    const span = `1 / span ${scenario.steps.length + 1}`;
+    for (const lane of lanes.querySelectorAll(".lane")) lane.style.gridRow = span;
+    body.appendChild(lanes);
+    view.appendChild(body);
+
+    const strip = document.createElement("section");
+    strip.innerHTML = '<h2>Bytes this sequence touches'
+      + '<span class="hint">O = output, I = input</span></h2>'
+      + '<div class="bytestrip" data-strip></div>';
+    view.appendChild(strip);
+    $("views").appendChild(view);
+
+    const bytes = sequenceBytes(scenario);
+    seqViews[scenario.name] = {
+      view, cards, lanes, bytes,
+      status: head.querySelector("[data-status]"),
+      run: head.querySelector("[data-run]"),
+      stop: head.querySelector("[data-stop]"),
+      stripCells: buildStrip(strip.querySelector("[data-strip]"), bytes),
+    };
+    const seq = seqViews[scenario.name];
+    seq.run.disabled = !enabled(scenario.name);
+    seq.run.onclick = () => post("/scenario", { name: scenario.name });
+    seq.stop.onclick = () => post("/scenario", { action: "stop" });
+  }
+}
+
+/* Which bytes of which assembly a whole sequence reads or writes. */
+function sequenceBytes(scenario) {
+  const out = [];
+  for (const [which, pick] of [["out", (s) => s.sets], ["in", (s) => s.waits]]) {
+    const seen = new Set();
+    for (const step of scenario.steps) {
+      for (const name of pick(step)) {
+        const field = fieldsByName[which + name];
+        if (!field) continue;
+        for (let b = field.byteOffset; b < field.endByteOffset; b++) {
+          if (!seen.has(b)) { seen.add(b); out.push({ which, byte: b }); }
+        }
+      }
+    }
+  }
+  out.sort((a, b) => a.which === b.which ? a.byte - b.byte : (a.which === "out" ? -1 : 1));
+  return out;
+}
+
+function buildStrip(container, bytes) {
+  container.textContent = "";
+  const made = [];
+  for (const entry of bytes) {
+    const cell = document.createElement("span");
+    cell.className = "bb";
+    cell.innerHTML = `${entry.which === "out" ? "O" : "I"}${entry.byte} <b>00</b>`;
+    const owners = (entry.which === "out" ? layout.output : layout.input).byteOwners[entry.byte] || [];
+    cell.title = `${entry.which === "out" ? "output" : "input"} byte ${entry.byte}\n`
+      + (owners.join("\n") || "not mapped by the vendor file");
+    container.appendChild(cell);
+    made.push({ entry, value: cell.querySelector("b"), cell });
+  }
+  return made;
+}
+
+/* The step the live view highlights: the running one, else the first. */
+function focusedStep() {
+  const state = lastEvent && lastEvent.scenario;
+  if (state && ["running", "waiting"].includes(state.status) && state.step >= 0) {
+    const scenario = scenarioByName(state.name);
+    if (scenario) return scenario.steps[state.step] || null;
+  }
+  if (tab === "live") return null;
+  const scenario = scenarioByName(tab);
+  return scenario ? scenario.steps[0] || null : null;
+}
+
+function chip(name, which, values, moved) {
+  const field = fieldsByName[which + name];
+  const value = values ? values[name] : undefined;
+  const bool = field && field.type === "bool";
+  const on = value === "true";
+  return `<span class="chip ${which} ${moved.has(which + name) ? "moved" : ""}"`
+    + ` title="${esc(field && field.description || name)}">`
+    + (bool ? `<i class="led${on ? " on" : ""}"></i>` : "")
+    + `<span class="cn">${name}</span>`
+    + `<span class="cp">${field ? position(field) : ""}</span>`
+    + (bool ? "" : `<span class="cv">${value === undefined ? "" : esc(value)}</span>`)
+    + `</span>`;
+}
+
+const STATES = ["pending", "running", "waiting", "done", "timeout"];
+
+function renderSequence(name, event) {
+  const scenario = scenarioByName(name);
+  const seq = seqViews[name];
+  const state = event.scenario;
+  const mine = state && state.name === name && state.status !== "idle";
+  const active = mine && ["running", "waiting", "preparing"].includes(state.status);
+  const moved = changedFieldNames(event);
+  seq.lanes.classList.toggle("running-seq", Boolean(active));
+
+  scenario.steps.forEach((step, index) => {
+    const slot = seq.cards[index];
+    const status = mine ? (state.steps[index] || "pending") : "";
+    for (const part of slot.parts) {
+      part.classList.remove(...STATES);
+      if (status) part.classList.add(status);
+    }
+    if (slot.outChips) {
+      slot.outChips.innerHTML = step.sets.map((n) => chip(n, "out", event.outputValues, moved)).join("");
+    }
+    if (slot.inChips) {
+      slot.inChips.innerHTML = step.waits.map((n) => chip(n, "in", event.inputValues, moved)).join("");
+    }
+    if (slot.time) {
+      /* Each step keeps its own cost once answered, so a finished sequence
+         still shows what every step took. */
+      const timing = (mine && state.timings && state.timings[index]) || [0, 0];
+      const cost = `${timing[0]} ms · ${timing[1]} read${timing[1] === 1 ? "" : "s"}`;
+      slot.time.textContent = !mine ? ""
+        : status === "waiting" ? cost
+        : status === "done" ? (timing[1] ? `✓ ${cost}` : "✓")
+        : status === "timeout" ? `no answer · ${cost}` : "";
+    }
+  });
+
+  for (const slot of seq.stripCells) {
+    const hex = slot.entry.which === "out" ? event.output : event.input;
+    slot.value.textContent = hex.substr(slot.entry.byte * 2, 2);
+    const changed = slot.entry.which === "out" ? event.changedOutput : event.changedInput;
+    if (changed.includes(slot.entry.byte)) {
+      slot.cell.classList.add("c");
+      requestAnimationFrame(() => requestAnimationFrame(() => slot.cell.classList.remove("c")));
+    }
+  }
+
+  seq.status.className = "status " + (mine ? state.status : "");
+  seq.status.textContent = !mine ? ""
+    : state.status === "preparing" ? state.message
+    : state.status === "done" ? `all ${scenario.steps.length} steps answered · control bits released`
+    : state.status === "failed" ? state.message
+    : state.status === "stopped" ? "stopped"
+    : `step ${state.step + 1} of ${scenario.steps.length}`;
+  seq.run.disabled = active || !enabled(name);
+  seq.stop.disabled = !active;
+
+  const pip = document.querySelector(`[data-pip="${name}"]`);
+  if (pip) pip.className = "pip " + (!mine ? "" : active ? "run" : state.status);
+}
+
+/* ------------------------------------------------------------------ render */
+function render(event) {
+  applyGrid("in", event.input, event.changedInput);
+  applyGrid("out", event.output, event.changedOutput);
+  highlightStepBytes();
+  applyTags(event);
+  for (const name of Object.keys(seqViews)) {
+    const state = event.scenario;
+    if (name === tab || (state && state.name === name)) renderSequence(name, event);
+  }
+}
+
+async function post(path, body) {
+  try {
+    const reply = await fetch(path, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => r.json());
+    toast(reply.message, !reply.ok);
+    return reply.ok;
+  } catch (error) { toast(String(error), true); return false; }
+}
+
+/* -------------------------------------------------------------- commands */
+function buildCommands() {
+  if (!layout.commands.length) return;
+  $("cmdPanel").hidden = false;
+  for (const name of layout.commands) {
+    const button = document.createElement("button");
+    button.className = "act" + (name === "Home" || name === "MoveJoints" ? " move" : "");
+    button.textContent = name;
+    button.title = name === "MoveJoints"
+      ? "sends the one target the server was started with; the page cannot choose another" : "";
+    button.onclick = async () => { button.disabled = true;
+      await post("/command", { command: name }); button.disabled = false; };
+    $("cmds").appendChild(button);
+  }
+}
+
+function toast(message, bad) {
+  const box = $("toast");
+  box.textContent = message;
+  box.className = "show" + (bad ? " bad" : "");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (box.className = ""), 4500);
+}
+
+/* ------------------------------------------------------------------ boot */
+async function start() {
+  layout = await fetch("/layout").then((r) => r.json());
+  $("ver").textContent = layout.version;
+  $("path").textContent = layout.connection.path || "?";
+  $("rpi").textContent = (layout.connection.rpiMicroseconds / 1000) + " ms";
+  $("inInfo").textContent = `inst ${layout.input.instance} / ${layout.input.sizeBytes} B`;
+  $("outInfo").textContent = `inst ${layout.output.instance} / ${layout.output.sizeBytes} B`;
+  $("target").textContent = layout.source.product_name
+    ? `${layout.source.product_name} firmware ${layout.source.firmware_revision}` : "robot";
+  /* The instance and the size are already in the header strip; what belongs
+     here is what the strip does not say and the panel is about: whether this
+     direction carries a run/idle header, and how many of its bytes the vendor
+     file maps to nothing.  Kept short enough to sit on the title's baseline
+     rather than wrap under it. */
+  const sub = (a) => `${a.runIdleHeader ? "32-bit run/idle header" : "no run/idle header"}`
+    + ` · ${a.unmapped.length} unmapped`;
+  $("inSub").textContent = sub(layout.input);
+  $("outSub").textContent = sub(layout.output);
+  $("note").textContent = `Sampled every ${layout.pollIntervalMs} ms while the connection runs `
+    + `at a ${layout.connection.rpiMicroseconds / 1000} ms RPI: this is the current process `
+    + `image, not every frame on the wire. Greyed bytes are mapped to no field.`;
+
+  buildGrid($("inGrid"), layout.input, "in");
+  buildGrid($("outGrid"), layout.output, "out");
+  buildTags();
+  buildSequenceViews();
+  buildRail();
+  buildCommands();
+  selectTab("live");
+
+  for (const id of ["filter", "onlyChanged", "onlyStep", "showOutput"]) {
+    $(id).addEventListener("input", () => { if (lastEvent) applyTags(lastEvent); });
+  }
+
+  const stream = new EventSource("/stream");
+  stream.onmessage = (message) => {
+    const event = JSON.parse(message.data);
+    lastEvent = event;
+    $("dot").className = event.connected ? "up" : "";
+    $("seq").textContent = event.sequence;
+    const now = performance.now();
+    if (lastAt && event.sequence > lastSeq) {
+      $("rate").textContent = ((event.sequence - lastSeq) / ((now - lastAt) / 1000)).toFixed(1) + " /s";
+    }
+    lastSeq = event.sequence; lastAt = now;
+    render(event);
+    if (event.error) toast(event.error, true);
+  };
+  stream.onerror = () => { $("dot").className = ""; };
+}
+
+start().catch((error) => toast("cannot load the layout: " + error, true));
+</script>
+</body>
+</html>

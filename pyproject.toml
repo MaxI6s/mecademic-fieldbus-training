@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mecademic-fieldbus-training"
+version = "0.1.0"
+description = "Training and demonstration tools for the mecademic-fieldbus cyclic scanner library"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+
+# The tools themselves add nothing: the dashboard is http.server plus Server-Sent
+# Events from the standard library. The only dependency is the library under
+# demonstration, installed from a checkout next to this one:
+#     pip install -e ../mecademicpy-cyclic
+dependencies = ["mecademic-fieldbus"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "black>=23.0", "isort>=5.10", "flake8>=6.0"]
+
+[tool.setuptools]
+packages = ["training"]
+
+[tool.setuptools.package-data]
+training = ["*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["training"]

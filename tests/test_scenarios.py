@@ -500,3 +500,55 @@ def test_the_confirming_tag_is_one_the_robot_publishes(io_map: IoMap) -> None:
     for entry in describe_scenarios(io_map):
         first = entry["confirms"].split()[0].rstrip(",")
         assert first in inputs, "{} is confirmed by {!r}".format(entry["name"], first)
+
+
+def test_the_exchange_is_an_unbroken_chain(io_map: IoMap) -> None:
+    """Action, answer, next action: the shape the page draws as a zigzag.
+
+    Every step but the last waits for an answer, because that answer is what
+    the diagonal link carries to the next action; a step in the middle with
+    nothing to wait for would break the chain.  And every step acts on the
+    output side, except the simulator faulting on cue, which writes nothing to
+    the assembly.
+    """
+    for scenario in available_scenarios(io_map).values():
+        for step in scenario.steps[:-1]:
+            assert step.waits, "{}/{} breaks the chain".format(scenario.name, step.title)
+        for step in scenario.steps:
+            assert step.sets or scenario.needs_simulator, "{}/{} sets nothing".format(
+                scenario.name, step.title
+            )
+
+
+def test_each_step_waits_for_what_confirms_it_and_no_more(io_map: IoMap) -> None:
+    """One confirming tag per step -- Busy and the like are left to the live view.
+
+    The tag a step waits on is the one that confirms it; a second tag is only
+    ever the value that answer carries, as with a dynamic data slot.
+    """
+    for scenario in available_scenarios(io_map).values():
+        for step in scenario.steps:
+            assert "RobotStatus_Busy" not in step.waits, scenario.name
+            assert len(step.waits) <= 2, "{}/{}".format(scenario.name, step.title)
+
+
+def test_each_step_shows_the_value_it_writes(io_map: IoMap) -> None:
+    """The sequence states what each step writes: Activate = True, then = False.
+
+    Read back from a rehearsal of the scenario's own actions, so the page can
+    never claim a value the step does not write.
+    """
+    described = {entry["name"]: entry for entry in describe_scenarios(io_map)}
+    for entry in described.values():
+        for step in entry["steps"]:
+            assert [name for name, _ in step["targets"]] == step["sets"], entry["name"]
+
+    activate = [dict(step["targets"]) for step in described["activate"]["steps"]]
+    assert activate == [{"RobotControl_Activate": "True"}, {"RobotControl_Activate": "False"}]
+
+    handed_over = dict(described["send-command"]["steps"][0]["targets"])
+    assert handed_over["MotionControl_MoveId"] == "previous + 1"
+    assert handed_over["MotionCommand"].endswith("MoveJoints")
+
+    held = dict(described["velocity"]["steps"][0]["targets"])
+    assert held["MotionControl_MoveId"] == "0", "held, not queued: the zero is the lesson"

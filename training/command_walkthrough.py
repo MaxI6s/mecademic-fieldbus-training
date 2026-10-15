@@ -46,7 +46,7 @@ from mecademic_fieldbus.io_map import INPUT_ASSEMBLY, OUTPUT_ASSEMBLY, IoMap
 from mecademic_fieldbus.robot_classes import JOINT_COUNT
 from mecademic_fieldbus.transports.base import FieldbusTransport
 
-from .assembly_view import AssemblyView, format_diff, format_field_table
+from .assembly_view import AssemblyView, format_diff, format_field_table, format_value
 from .backend import build_transport, describe_target
 
 __all__ = [
@@ -668,7 +668,9 @@ def _hand_over(command: Union[str, int], *arguments: float) -> Callable[["Walkth
     return action
 
 
-def _reset_setpoint(waits: Tuple[str, ...] = (), settled: Optional[Settled] = None) -> Step:
+def _reset_setpoint(
+    waits: Tuple[str, ...] = (), settled: Optional[Settled] = None, check: str = ""
+) -> Step:
     """Build the step that puts MotionControl_Setpoint back down.
 
     Setpoint says "this output carries a command".  Once the robot has taken
@@ -677,13 +679,14 @@ def _reset_setpoint(waits: Tuple[str, ...] = (), settled: Optional[Settled] = No
     Args:
         waits: What to wait for afterwards, if anything.
         settled: The matching condition.
+        check: How a display labels the wait.
 
     Returns:
         The step.
     """
     return Step(
         title="reset MotionControl_Setpoint",
-        check="wait for {}".format(waits[0]) if waits else "",
+        check=check,
         narration="""
             The robot has taken the command, so the setpoint goes back down:
             the output no longer carries a command. Whatever was queued
@@ -726,7 +729,7 @@ def _activate_scenario() -> Scenario:
         steps=(
             Step(
                 title="set RobotControl_Activate",
-                check="wait for RobotStatus_Activated",
+                check="wait for RobotStatus_Activated = True",
                 narration="""
                     One bit, at byte 0.1. No message and no acknowledgement to
                     read: the scanner publishes an image with that bit set, and
@@ -778,7 +781,7 @@ def _deactivate_scenario() -> Scenario:
         steps=(
             Step(
                 title="set RobotControl_Deactivate",
-                check="wait for RobotStatus_Activated = false",
+                check="wait for RobotStatus_Activated = False",
                 narration="""
                     Deactivate is its own bit, and the vendor documents it as
                     winning over Activate.
@@ -827,7 +830,7 @@ def _home_scenario() -> Scenario:
         steps=(
             Step(
                 title="set RobotControl_Home",
-                check="wait for RobotStatus_Homed",
+                check="wait for RobotStatus_Homed = True",
                 narration="""
                     The same shape as activation. RobotStatus_Homed is the gate
                     on every motion command.
@@ -939,7 +942,7 @@ def _pause_scenario() -> Scenario:
         steps=(
             Step(
                 title="set MotionControl_Pause",
-                check="wait for MotionStatus_Paused",
+                check="wait for MotionStatus_Paused = True",
                 narration="The robot pauses with its queue intact.",
                 action=lambda walk: walk.set_motion_control(pause=True),
                 settled=_paused,
@@ -985,7 +988,7 @@ def _resume_scenario() -> Scenario:
         steps=(
             Step(
                 title="set MotionControl_Pause",
-                check="wait for MotionStatus_Paused",
+                check="wait for MotionStatus_Paused = True",
                 narration="Paused first, so that resuming has something to undo.",
                 action=lambda walk: walk.set_motion_control(pause=True),
                 settled=_paused,
@@ -994,7 +997,7 @@ def _resume_scenario() -> Scenario:
             ),
             Step(
                 title="reset Pause, set MotionControl_ResumeMotion",
-                check="wait for MotionStatus_Paused = false",
+                check="wait for MotionStatus_Paused = False",
                 narration="""
                     ResumeMotion goes from 0 to 1 in this image: a rising edge,
                     which is the only thing this bit acts on.
@@ -1040,7 +1043,7 @@ def _clear_motion_scenario() -> Scenario:
         steps=(
             Step(
                 title="set MotionControl_ClearMove",
-                check="wait for MotionStatus_Cleared",
+                check="wait for MotionStatus_Cleared = True",
                 narration="The queue is emptied and the robot pauses.",
                 action=lambda walk: walk.set_motion_control(clear_move=True),
                 settled=_cleared,
@@ -1093,7 +1096,7 @@ def _send_command_scenario(io_map: IoMap) -> Scenario:
         steps=(
             Step(
                 title="set MoveJoints, new MoveId, Setpoint",
-                check="wait for MotionStatus_MoveID",
+                check="wait for MotionStatus_MoveID = MoveId",
                 narration="""
                     The command and its arguments are staged, then the move id
                     changes with the setpoint set. The echo in MoveID is the
@@ -1110,7 +1113,7 @@ def _send_command_scenario(io_map: IoMap) -> Scenario:
                 waits=("MotionStatus_MoveID",),
                 teaches="The robot acts on the change of the move id, not its value.",
             ),
-            _reset_setpoint(("MotionStatus_EOB",), _idle),
+            _reset_setpoint(("MotionStatus_EOB",), _idle, "wait for MotionStatus_EOB = True"),
         ),
     )
 
@@ -1153,7 +1156,7 @@ def _velocity_scenario(io_map: IoMap) -> Scenario:
         steps=(
             Step(
                 title="set MoveJointsVel, Setpoint, MoveId = 0",
-                check="wait for MotionStatus_EOM = false",
+                check="wait for MotionStatus_EOM = False",
                 narration="""
                     The move id stays at zero: held, not queued. The robot
                     moves for as long as the setpoint is set.
@@ -1169,7 +1172,7 @@ def _velocity_scenario(io_map: IoMap) -> Scenario:
                 waits=("MotionStatus_EOM",),
                 teaches="MoveId = 0 means held. MoveId changing means queued.",
             ),
-            _reset_setpoint(("MotionStatus_EOB",), _idle),
+            _reset_setpoint(("MotionStatus_EOB",), _idle, "wait for MotionStatus_EOB = True"),
         ),
     )
 
@@ -1204,7 +1207,7 @@ def _call_program_scenario(io_map: IoMap) -> Scenario:
         steps=(
             Step(
                 title="set StartProgram {}, new MoveId, Setpoint".format(DEMO_PROGRAM_ID),
-                check="wait for MotionStatus_OfflineProgramId",
+                check="wait for MotionStatus_OfflineProgramId = {}".format(DEMO_PROGRAM_ID),
                 narration="The same handshake as a move; only the command differs.",
                 action=_hand_over("StartProgram", float(DEMO_PROGRAM_ID)),
                 settled=_program_running,
@@ -1295,7 +1298,7 @@ def _set_variable_scenario() -> Scenario:
         steps=(
             Step(
                 title="set {} + values, new MoveId, Setpoint".format(DEMO_VARIABLE_ID),
-                check="wait for MotionStatus_MoveID",
+                check="wait for MotionStatus_MoveID = MoveId",
                 narration="The command handshake, addressed to a variable.",
                 action=_hand_over(DEMO_VARIABLE_ID, 1.5, 2.5, 3.5),
                 settled=_acknowledged,
@@ -1345,7 +1348,7 @@ def _get_variable_scenario() -> Scenario:
         steps=(
             Step(
                 title="set {} + values, new MoveId, Setpoint".format(DEMO_VARIABLE_ID),
-                check="wait for MotionStatus_MoveID",
+                check="wait for MotionStatus_MoveID = MoveId",
                 narration="Written first, so there is something to read.",
                 action=_hand_over(DEMO_VARIABLE_ID, 1.5, 2.5, 3.5),
                 settled=_acknowledged,
@@ -1376,6 +1379,93 @@ def _get_variable_scenario() -> Scenario:
     )
 
 
+#: Cyclic identifiers that address a robot variable rather than a command or a
+#: dynamic data type.
+_VARIABLE_IDS = range(10000, 20000)
+
+#: The output words that request a dynamic data type, one per slot.
+_DYNAMIC_CONFIG_FIELDS = tuple("DynamicTypeCfg{}".format(slot) for slot in range(4))
+
+
+def _rehearse(io_map: IoMap, scenario: Scenario, first_move_id: int) -> List[Dict[str, Any]]:
+    """Run a scenario's actions on a throwaway simulator and record what they write.
+
+    Only the output image is read, and it depends on the actions alone, so
+    nothing is waited for: this is the scenario's own code telling the page
+    what it sets, rather than a second copy of that knowledge to keep in step.
+
+    Args:
+        io_map: Map describing the assemblies.
+        scenario: Scenario to rehearse.
+        first_move_id: Where the move-id counter starts.
+
+    Returns:
+        For each step, the value of every tag it declares it sets.
+    """
+    from mock_robot import LoopbackTransport, RobotSimulator
+
+    simulator = RobotSimulator(io_map, activation_time_s=0.0, homing_time_s=0.0)
+    transport = LoopbackTransport(simulator)
+    transport.connect("rehearsal")
+    walkthrough = Walkthrough(transport, io_map, color=False)
+    walkthrough.simulator = simulator
+    walkthrough._move_id = first_move_id
+    written = []
+    for step in scenario.steps:
+        step.action(walkthrough)
+        values = io_map.decode_all(OUTPUT_ASSEMBLY, walkthrough.output_image)
+        written.append({name: values[name] for name in step.sets})
+    return written
+
+
+def describe_targets(io_map: IoMap, scenario: Scenario) -> List[List[Tuple[str, str]]]:
+    """Describe the value each step writes into each tag it sets.
+
+    The scenario is rehearsed twice with the move-id counter started at two
+    different places.  A tag whose value differs between the two depends on
+    the run, which in practice means the move id, and is described as
+    ``previous + 1`` rather than as whatever number one rehearsal produced.
+    Identifiers are annotated with what they name.
+
+    Args:
+        io_map: Map describing the assemblies.
+        scenario: Scenario to describe.
+
+    Returns:
+        For each step, ``(tag, value)`` pairs in the order the step declares.
+    """
+    fields = {field.name: field for field in io_map.describe_fields(OUTPUT_ASSEMBLY)}
+    commands = {value: name for name, value in io_map.motion_command_ids.items()}
+    types = {value: name for name, value in io_map.dynamic_data_types.items()}
+
+    def describe(name: str, value: Any, other: Any) -> str:
+        field = fields[name]
+        if value != other:
+            return "previous + 1"
+        if field.is_bool:
+            return "True" if value else "False"
+        text = format_value(field, value)
+        label = ""
+        if name == "MotionCommand":
+            label = commands.get(int(value), "")
+        elif name.startswith("DynamicTypeCfg"):
+            label = types.get(int(value), "")
+        if (
+            not label
+            and name in ("MotionCommand",) + _DYNAMIC_CONFIG_FIELDS
+            and (int(value) in _VARIABLE_IDS)
+        ):
+            label = "variable"
+        return "{} \u00b7 {}".format(text, label) if label else text
+
+    first = _rehearse(io_map, scenario, 0)
+    second = _rehearse(io_map, scenario, 1000)
+    return [
+        [(name, describe(name, value, again[name])) for name, value in step.items()]
+        for step, again in zip(first, second)
+    ]
+
+
 def describe_scenarios(io_map: IoMap) -> List[Dict[str, Any]]:
     """Describe every scenario as plain data, for a display to render.
 
@@ -1393,6 +1483,7 @@ def describe_scenarios(io_map: IoMap) -> List[Dict[str, Any]]:
     """
     described = []
     for scenario in available_scenarios(io_map).values():
+        targets = describe_targets(io_map, scenario)
         described.append(
             {
                 "name": scenario.name,
@@ -1415,10 +1506,11 @@ def describe_scenarios(io_map: IoMap) -> List[Dict[str, Any]]:
                         "check": step.check
                         or ("wait for {}".format(step.waits[0]) if step.waits else ""),
                         "sets": list(step.sets),
+                        "targets": [list(pair) for pair in target],
                         "waits": list(step.waits),
                         "blocking": step.settled is not None,
                     }
-                    for step in scenario.steps
+                    for step, target in zip(scenario.steps, targets)
                 ],
             }
         )

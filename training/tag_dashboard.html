@@ -785,6 +785,8 @@ function buildSequenceViews() {
     links.setAttribute("class", "links");
     links.setAttribute("aria-hidden", "true");
     lanes.appendChild(links);
+    const span = `1 / span ${scenario.steps.length + 1}`;
+    for (const lane of lanes.querySelectorAll(".lane")) lane.style.gridRow = span;
     body.appendChild(lanes);
     view.appendChild(body);
 
@@ -912,16 +914,24 @@ function focusedStep() {
   return scenario ? scenario.steps[0] || null : null;
 }
 
-function chip(name, which, values, moved) {
+/* A tag in a sequence.  With a target, it shows the value the step writes --
+   "RobotControl_Activate = True" -- rather than the live one, which after the
+   run would show the last step's value against every step. */
+function chip(name, which, values, moved, target) {
   const field = fieldsByName[which + name];
-  const value = values ? values[name] : undefined;
   const bool = field && field.type === "bool";
-  const on = value === "true";
-  return `<span class="chip ${which} ${moved.has(which + name) ? "moved" : ""}"`
-    + ` title="${esc(field && field.description || name)}">`
-    + (bool ? `<i class="led${on ? " on" : ""}"></i>` : "")
-    + `<span class="cn">${name}</span>`
-    + `<span class="cp">${field ? position(field) : ""}</span>`
+  const pos = `<span class="cp">${field ? position(field) : ""}</span>`;
+  const flash = moved.has(which + name) ? "moved" : "";
+  const title = esc(field && field.description || name);
+  if (target !== undefined) {
+    return `<span class="chip ${which} ${flash}" title="${title}">`
+      + (bool ? `<i class="led${target === "True" ? " on" : ""}"></i>` : "")
+      + `<span class="cn">${name}</span><span class="cv">= ${esc(target)}</span>${pos}</span>`;
+  }
+  const value = values ? values[name] : undefined;
+  return `<span class="chip ${which} ${flash}" title="${title}">`
+    + (bool ? `<i class="led${value === "true" ? " on" : ""}"></i>` : "")
+    + `<span class="cn">${name}</span>${pos}`
     + (bool ? "" : `<span class="cv">${value === undefined ? "" : esc(value)}</span>`)
     + `</span>`;
 }
@@ -947,7 +957,8 @@ function renderSequence(name, event) {
       if (status) part.classList.add(status);
     }
     if (slot.outChips) {
-      slot.outChips.innerHTML = step.sets.map((n) => chip(n, "out", event.outputValues, moved)).join("");
+      slot.outChips.innerHTML = step.targets
+        .map(([n, target]) => chip(n, "out", null, moved, target)).join("");
     }
     if (slot.inChips) {
       slot.inChips.innerHTML = step.waits.map((n) => chip(n, "in", event.inputValues, moved)).join("");

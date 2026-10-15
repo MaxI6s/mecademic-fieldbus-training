@@ -136,30 +136,35 @@ edge, a request and its echo, a value held high, a slot asked for and answered.
 The full paragraph still exists — the terminal walkthrough prints it, because a
 terminal is where reading is the point.
 
-**The exchange** is two lanes, the scanner's and the robot's, with what crosses
-between them drawn as arrows:
+**The exchange** is two lanes, the scanner's and the robot's. Each sequence is
+the same short chain — set the request, wait for the bit that confirms it,
+reset the request — and the links draw it as a zigzag, unlabelled:
 
 ```
-┌──────── OUTPUT ─────────┐                   ┌┄┄┄┄┄┄┄┄ INPUT ┄┄┄┄┄┄┄┄┄┐
-│ ① SET ROBOTCONTROL_     │ ───── set ─────▶  ┊ CHECK                   ┊
-│   ACTIVATE   ▌Activate ●│ ◀── wait for ───  ┊ ▌Busy ●  ▌Activated ●   ┊
-│ ② … unchanged           │ ◀── wait for ───  ┊ WAIT FOR ACTIVATED      ┊
-│ ③ RELEASE ROBOTCONTROL_ │ ──── reset ────▶  ┊ CHECK                   ┊
-│   ACTIVATE   ▌Activate ○│ ◀── wait for ───  ┊ ▌Activated ●            ┊
-└─────────────────────────┘                   └┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┘
+┌───────── OUTPUT ─────────┐            ┌┄┄┄┄┄┄┄┄┄ INPUT ┄┄┄┄┄┄┄┄┄┐
+│ ① SET                    │            ┊ WAIT FOR                 ┊
+│   RobotControl_Activate ─┼──────────▶ ┊   RobotStatus_Activated  ┊
+│                          │          ╱ ┊                          ┊
+│ ② RESET                ◀─┼─────────╱  ┊                          ┊
+│   RobotControl_Activate  │            ┊                          ┊
+└──────────────────────────┘            └┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┘
 ```
 
-One row per step. A step that writes is titled in the output lane; one that only
-waits is titled in the input lane, and its output box says the image is
-unchanged. The arrow says what crosses: **set** going out, **reset** when a step
-puts its bits back down — "set" means "to 1" to anyone who writes ladder — and
-**wait for** or **read** coming back. Each tag is a chip with its name, its
-`byte.bit` position and its live value; booleans get an LED.
+A link goes across from an action to the answer it waits for, then diagonally
+from that answer down to the next action — which is what the answer unlocks.
+Each step waits for the one tag that confirms it and nothing else: `Busy` and
+the like are on the live view, not in the sequence. On the output side each chip
+states the value its step writes — `RobotControl_Activate = True`, then `= False`
+on the reset — with identifiers annotated (`MotionCommand = 1 · MoveJoints`) and
+the move id shown as `previous + 1`, because its number depends on the run. Those
+values are read back from a rehearsal of the scenario's own actions, so the page
+cannot claim a value the step does not write. On the input side the chips are
+live, and the box title states what they are waited for: `= True`, `≠ 0`.
 
-The visual state does the explaining: what is still to come recedes, the step in
-progress turns blue with its arrows moving, an answered step turns green and
-keeps **its own** `42 ms · 3 reads` — the number an integrator sizing a PLC scan
-actually needs — and a step the robot never answered turns red.
+The visual state does the explaining: what is still to come recedes, the link
+of the step in progress turns blue and runs, an answered step turns green and
+keeps **its own** `509 ms · 20 reads` — the number an integrator sizing a PLC
+scan actually needs — and a step the robot never answered turns red.
 
 Below that, a strip of just the bytes the sequence touches — `O4`, `O8`, `I8`,
 `I14` — with their live hex value, flashing as they change.
